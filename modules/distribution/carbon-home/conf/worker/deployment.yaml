@@ -25,7 +25,7 @@ wso2.carbon:
     # ports used by this server
   ports:
       # port offset
-    offset: 0
+    offset: 1
 
 wso2.transport.http:
   transportProperties:
@@ -43,11 +43,11 @@ wso2.transport.http:
     -
       id: "default"
       host: "0.0.0.0"
-      port: 9090
+      port: 9091
     -
       id: "msf4j-https"
       host: "0.0.0.0"
-      port: 9443
+      port: 9444
       scheme: https
       keyStoreFile: "${carbon.home}/resources/security/wso2carbon.jks"
       keyStorePassword: wso2carbon
@@ -73,11 +73,11 @@ siddhi.stores.query.api:
     -
       id: "default"
       host: "0.0.0.0"
-      port: 7070
+      port: 7071
     -
       id: "msf4j-https"
       host: "0.0.0.0"
-      port: 7443
+      port: 7444
       scheme: https
       keyStoreFile: "${carbon.home}/resources/security/wso2carbon.jks"
       keyStorePassword: wso2carbon
@@ -483,10 +483,10 @@ wso2.datasources:
       definition:
         type: RDBMS
         configuration:
-          jdbcUrl: 'jdbc:h2:${sys:carbon.home}/wso2/worker/database/WSO2AM_STATS_DB;AUTO_SERVER=TRUE'
-          username: wso2carbon
-          password: wso2carbon
-          driverClassName: org.h2.Driver
+          jdbcUrl: 'jdbc:mysql://localhost:3306/aggregation?useSSL=false'
+          username: admindb
+          password: admin
+          driverClassName: com.mysql.jdbc.Driver
           maxPoolSize: 50
           idleTimeout: 60000
           connectionTestQuery: SELECT 1
@@ -601,8 +601,8 @@ auth.configs:
 #      password: admin
 
   # Configuration for enabling analytics solutions when server type in Carbon Configuration is set as 'wso2-sp'.
-#analytics.solutions:
+analytics.solutions:
 #  IS-analytics.enabled: true
-#  APIM-analytics.enabled: true
-#  APIM-alerts.enabled: true
+  APIM-analytics.enabled: true
+  APIM-alerts.enabled: true
 #  EI-analytics.enabled: true
