@@ -29,7 +29,10 @@
     <property name="port" value="7611"/>
     <property name="username" value="admin"/>
     <property name="password" value="admin"/>
-    <property name="numberOfEvents" value="100" />
+    <property name="numberOfEvents" value="10000000" />
+    <property name="batchSize" value="10" />
+    <property name="batchTime" value="1" />
+
 
     <path id="javac.classpath">
         <pathelement path="${class.dir}"/>
@@ -73,7 +76,6 @@
     </target>
 
     <target name="run" depends="compile">
-        <echo>Configure -Dprotocol and -Dhost and -Dport and -Dusername and -Dpassword. </echo>
         <java classname="${main-class}"
               classpathref="javac.classpath" fork="true">
             <arg value="${protocol}"/>
@@ -82,6 +84,8 @@
             <arg value="${username}"/>
             <arg value="${password}"/>
             <arg value="${numberOfEvents}"/>
+            <arg value="${batchSize}"/>
+            <arg value="${batchTime}"/>
         </java>
     </target>
 </project>

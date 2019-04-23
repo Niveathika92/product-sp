@@ -27,6 +27,8 @@ import org.wso2.carbon.databridge.commons.utils.DataBridgeCommonsUtils;
 
 import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -34,24 +36,9 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class Client {
     private static Log log = LogFactory.getLog(Client.class);
-    private static final String STREAM_NAME = "org.wso2.apimgt.statistics.throttle";
-    private static final String FAULT_STREAM = "org.wso2.apimgt.statistics.fault";
     private static final String REQUEST_STREAM = "org.wso2.apimgt.statistics.request";
     private static final String VERSION = "3.0.0";
-    private static String agentConfigFileName = "sync.data.agent.config.yaml";
-
-    private static String[] username = {"admin", "smith", "finch", "starc", "maxwell", "haddin", "warner",
-            "faulkner", "marsh"};
-    private static String[] tenantDomain = {"carbon.super", "loc.super", "range.com"};
-    private static String[] apiName = {"ceylan", "NDB", "Commercial", "BOC", "Peoples", "LG", "Abans", "Singer",
-            "Damro"};
-    private static String[] apiCreator = {"admin", "rohan", "Jeevan"};
-    private static String[] apiMethod = {"GET", "POST", "PUT"};
-    private static String[] applicationId = {"1", "2", "3"};
-    private static String[] applicationName = {"default", "app1", "app2"};
-    private static String[] applicationCK = {"default", "app1", "app2"};
-    private static String[] applicationOwner = {"Michael", "clarke", "cook"};
-    private static String[] userIp = {"10.100.8.14", "10.100.8.26", "10.100.3.64"};
+    private static String agentConfigFileName = "data.agent.config.yaml";
 
     public static void main(String[] args) {
 
@@ -67,44 +54,57 @@ public class Client {
         String username = args[3];
         String password = args[4];
         String numberOfEventsStr = args[5];
-        int numberOfEvents = Integer.parseInt(numberOfEventsStr);
+        String batchSizeStr = args[6];
+        String batchTimeStr = args[7];
+
+        long numberOfEvents = Long.parseLong(numberOfEventsStr);
+        int batchSize = Integer.parseInt(batchSizeStr);
+        int batchTime = Integer.parseInt(batchTimeStr);
 
         try {
             log.info("Starting APIM Event Client");
             AgentHolder.setConfigPath(DataPublisherUtil.getDataAgentConfigPath(agentConfigFileName));
             DataPublisher dataPublisher = new DataPublisher(protocol, "tcp://" + host + ":" + port,
                     "ssl://" + host + ":" + sslPort, username, password);
-            Event event = new Event();
-            event.setStreamId(DataBridgeCommonsUtils.generateStreamId(STREAM_NAME, VERSION));
-            event.setCorrelationData(null);
-            Event faultEvent = new Event();
-            faultEvent.setStreamId(DataBridgeCommonsUtils.generateStreamId(FAULT_STREAM, VERSION));
-            faultEvent.setCorrelationData(null);
             Event requestEvent = new Event();
             requestEvent.setStreamId(DataBridgeCommonsUtils.generateStreamId(REQUEST_STREAM, VERSION));
-            event.setCorrelationData(null);
+            requestEvent.setCorrelationData(null);
+            requestEvent.setMetaData(new Object[]{"mozilla"});
 
-            String metaClientType = "mozilla";
+            long testStartTime = System.currentTimeMillis();
+            long startTime, currentTime, totalCount = 0, batchCount;
+            List<Event> arrayList = new ArrayList<Event>(batchSize);
 
-            for (int i = 0; i < numberOfEvents; i++) {
-                event.setMetaData(new Object[]{metaClientType});
-                faultEvent.setMetaData(new Object[]{metaClientType});
-                requestEvent.setMetaData(new Object[]{metaClientType});
-                Object[] data = getObject();
-                Object[] faultData = getFaultStream();
-                Object[] requestData = getRequestStream();
-                event.setPayloadData(data);
-                faultEvent.setPayloadData(faultData);
-                requestEvent.setPayloadData(requestData);
-                dataPublisher.publish(event);
-                dataPublisher.publish(faultEvent);
-                dataPublisher.publish(requestEvent);
+            for (int i = 0; i < numberOfEvents; i += batchSize) {
+                batchCount = 0;
+                startTime = System.currentTimeMillis();
+                for (int j = 0; j < batchSize; j++) {
+                    requestEvent.setPayloadData(getRequestStream());
+                    long eventCurrentTime = System.currentTimeMillis();
+                    requestEvent.setTimeStamp(eventCurrentTime);
+                    if (eventCurrentTime - startTime <= batchTime) {
+                        batchCount++;
+                        dataPublisher.publish(requestEvent);
+                    }
+                }
+                totalCount += batchCount;
+                System.out.println("Actual Batch Count : " + batchCount + " events");
+                arrayList.clear();
+                currentTime = System.currentTimeMillis();
+                if (currentTime - startTime <= batchTime) {
+                    try {
+                        Thread.sleep(batchTime - (currentTime - startTime));
+                    } catch (InterruptedException ex) {
+                        log.error(ex);
+                    }
+                }
             }
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException e) {
-                log.error(e);
-            }
+
+            long testEndTime = System.currentTimeMillis();
+            System.out.println("Total time to publish : " + (testEndTime - testStartTime) + " ms");
+            System.out.println("Total events publish : " +  totalCount + " events");
+            System.out.println("Total time to publish : " + ((totalCount * 1000 )/((testEndTime - testStartTime) * batchTime)) + " events/second");
+
             dataPublisher.shutdown();
             log.info("Events published successfully");
 
@@ -113,129 +113,51 @@ public class Client {
         }
     }
 
-    private static Object[] getObject() {
-
-        ThrottledOutDTO throttledObj = new ThrottledOutDTO();
-        String[] username = {"admin", "smith", "finch", "starc", "maxwell", "haddin", "warner", "faulkner", "marsh"};
-        String[] userTenantDomain = {"carbon.super", "loc.super"};
-        String[] apiCreator = {"admin", "rohan", "Jeevan"};
-        String[] applicationId = {"1", "2", "3"};
-        String[] applicationName = {"default", "app1", "app2"};
-        String[] subscriber = {"Michael", "clarke", "cook"};
-        String[] throttledOutReason = {"SUBSCRIPTION_LIMIT_EXCEEDED", "APPLICATION_LIMIT_EXCEEDED"};
-
-        int index = ThreadLocalRandom.current().nextInt(0, 9);
-
-        throttledObj.username = username[index % 9];
-        throttledObj.userTenantDomain = "carbon.super";
-        throttledObj.apiName = apiName[index % 9];
-        throttledObj.apiVersion = "1.0";
-        throttledObj.apiContext = throttledObj.apiName + "/" + throttledObj.apiVersion;
-        throttledObj.apiCreator = apiCreator[index % 3];
-        throttledObj.apiCreatorTenantDomain = "carbon.super";
-        throttledObj.applicationId = applicationId[index % 3];
-        throttledObj.applicationName = applicationName[index % 3];
-        throttledObj.subscriber = subscriber[index % 2];
-        throttledObj.throttledOutReason = throttledOutReason[index % 2];
-        throttledObj.gatewayType = "g1";
-        throttledObj.throttledOutTimestamp = new Timestamp(System.currentTimeMillis()).getTime();
-        throttledObj.hostname = "localhost";
-
-        return (new Object[]{
-                throttledObj.username,
-                throttledObj.userTenantDomain,
-                throttledObj.apiName,
-                throttledObj.apiVersion,
-                throttledObj.apiContext,
-                throttledObj.apiCreator,
-                throttledObj.apiCreatorTenantDomain,
-                throttledObj.applicationId,
-                throttledObj.applicationName,
-                throttledObj.subscriber,
-                throttledObj.throttledOutReason,
-                throttledObj.gatewayType,
-                throttledObj.throttledOutTimestamp,
-                throttledObj.hostname
-        });
-    }
-
-    private static Object[] getFaultStream() {
-        int index = ThreadLocalRandom.current().nextInt(0, 9);
-        FaultDTO faultObj = new FaultDTO();
-        faultObj.applicationConsumerKey = applicationCK[index % applicationCK.length];
-        faultObj.apiName = apiName[index % 3];
-        faultObj.apiVersion = "1.0";
-        faultObj.apiContext = "get";
-        faultObj.apiResourcePath = "/temp";
-        faultObj.apiMethod = apiMethod[index % apiMethod.length];
-        faultObj.apiCreator = apiCreator[index % apiCreator.length];
-        faultObj.username = username[index % username.length];
-        faultObj.userTenantDomain = tenantDomain[index % tenantDomain.length];
-        faultObj.apiCreatorTenantDomain = tenantDomain[index % tenantDomain.length];
-        faultObj.hostname = "localhost";
-        faultObj.applicationId = applicationId[index % applicationName.length];
-        faultObj.applicationName = applicationName[index % applicationName.length];
-        faultObj.protocol = "https";
-        faultObj.errorCode = "403";
-        faultObj.errorMessage = "notfound";
-        faultObj.requestTimestamp = new Timestamp(System.currentTimeMillis()).getTime();
-
-        return (new Object[]{
-              faultObj.applicationConsumerKey,
-              faultObj.apiName,
-              faultObj.apiVersion,
-              faultObj.apiContext,
-              faultObj.apiResourcePath,
-              faultObj.apiMethod,
-              faultObj.apiCreator,
-              faultObj.username,
-              faultObj.userTenantDomain,
-              faultObj.apiCreatorTenantDomain,
-              faultObj.hostname,
-              faultObj.applicationId,
-              faultObj.applicationName,
-              faultObj.protocol,
-              faultObj.errorCode,
-              faultObj.errorMessage,
-              faultObj.requestTimestamp
-        });
-    }
-
     public static Object[] getRequestStream() {
         RequestDTO requestObj = new RequestDTO();
-        Boolean[] throttledOut = {true, false, true, true, true, true, true, true, true};
-        long[] responseTime = {1, 6, 2};
-        int[] responseCode = {200, 403, 200, 200, 200, 200, 200, 200, 550};
+        String[] tenantDomain = {"carbon.super"};
+        String[] apiName = {"ceylan"};
+        String[] apiCreator = {"admin"};
+        String[] apiMethod = {"GET"};
+        String[] applicationId = {"1"};
+        String[] applicationName = {"default"};
+        String[] applicationCK = {"default"};
+        String[] applicationOwner = {"Michael"};
+        Boolean[] throttledOut = {false};
+        long[] responseTime = {10, 60, 20};
+        long[] backendTime = {10, 60, 20};
 
-        int index = ThreadLocalRandom.current().nextInt(0, 9);
 
-        requestObj.applicationConsumerKey = applicationCK[index % 3];
-        requestObj.applicationName = applicationName[index % 3];
-        requestObj.applicationId = applicationId[index % 3];
-        requestObj.applicationOwner = applicationOwner[index % 3];
-        requestObj.apiContext = apiName[index % 9] + "/" + "1.0";
-        requestObj.apiName = apiName[index % 9];
+        int ip = ThreadLocalRandom.current().nextInt(0, 100);
+        int index = ThreadLocalRandom.current().nextInt(0, 10);
+
+        requestObj.applicationConsumerKey = applicationCK[0];
+        requestObj.applicationName = applicationName[0];
+        requestObj.applicationId = applicationId[0];
+        requestObj.applicationOwner = applicationOwner[0];
+        requestObj.apiContext = apiName[0] + "/" + "1.0";
+        requestObj.apiName = apiName[0];
         requestObj.apiVersion = "1.0";
-        requestObj.apiResourcePath = requestObj.apiName + "/" + apiMethod[index % 3];
-        requestObj.apiResourceTemplate = requestObj.apiName + "/" + apiMethod[index % 3];
-        requestObj.apiMethod = apiMethod[index % 3];
-        requestObj.apiCreator = apiCreator[index % 3];
-        requestObj.apiCreatorTenantDomain = tenantDomain[index % 3];
+        requestObj.apiResourcePath = requestObj.apiName + "/" + apiMethod[0];
+        requestObj.apiResourceTemplate = requestObj.apiName + "/" + apiMethod[0];
+        requestObj.apiMethod = apiMethod[0];
+        requestObj.apiCreator = apiCreator[0];
+        requestObj.apiCreatorTenantDomain = tenantDomain[0];
         requestObj.apiTier = "unlimited";
         requestObj.apiHostname = "localhost";
-        requestObj.username = "default";
+        requestObj.username = String.valueOf(ip);
         requestObj.userTenantDomain = requestObj.apiCreatorTenantDomain;
-        requestObj.userIp = userIp[index % userIp.length];
+        requestObj.userIp = String.valueOf(ip);
         requestObj.userAgent = "Mozilla";
         requestObj.requestTimestamp = new Timestamp(System.currentTimeMillis()).getTime();
-        requestObj.throttledOut = throttledOut[index % 9];
+        requestObj.throttledOut = throttledOut[0];
         requestObj.responseTime = responseTime[index % 3];
         requestObj.serviceTime = (long) 2;
-        requestObj.backendTime = (long) 2;
+        requestObj.backendTime = backendTime[index % 3];
         requestObj.responseCacheHit = false;
         requestObj.responseSize = (long) 2;
         requestObj.protocol = "Https";
-        requestObj.responseCode = responseCode[index % 3];
+        requestObj.responseCode = 200;
         requestObj.destination = "www.loc.com";
         requestObj.securityLatency = (long) 2;
         requestObj.throttlingLatency = (long) 2;
@@ -247,42 +169,42 @@ public class Client {
         requestObj.label = "SYNAPSE";
 
         return (new Object[]{
-           requestObj.applicationConsumerKey,
-           requestObj.applicationName,
-           requestObj.applicationId,
-           requestObj.applicationOwner,
-           requestObj.apiContext,
-           requestObj.apiName,
-           requestObj.apiVersion,
-           requestObj.apiResourcePath,
-           requestObj.apiResourceTemplate,
-           requestObj.apiMethod,
-           requestObj.apiCreator,
-           requestObj.apiCreatorTenantDomain,
-           requestObj.apiTier,
-           requestObj.apiHostname,
-           requestObj.username,
-           requestObj.userTenantDomain,
-           requestObj.userIp,
-           requestObj.userAgent,
-           requestObj.requestTimestamp,
-           requestObj.throttledOut,
-           requestObj.responseTime,
-           requestObj.serviceTime,
-           requestObj.backendTime,
-           requestObj.responseCacheHit ,
-           requestObj.responseSize ,
-           requestObj.protocol ,
-           requestObj.responseCode ,
-           requestObj.destination ,
-           requestObj.securityLatency ,
-           requestObj.throttlingLatency ,
-           requestObj.requestMedLat ,
-           requestObj.responseMedLat ,
-           requestObj.backendLatency ,
-           requestObj.otherLatency ,
-           requestObj.gatewayType ,
-           requestObj.label
+                requestObj.applicationConsumerKey,
+                requestObj.applicationName,
+                requestObj.applicationId,
+                requestObj.applicationOwner,
+                requestObj.apiContext,
+                requestObj.apiName,
+                requestObj.apiVersion,
+                requestObj.apiResourcePath,
+                requestObj.apiResourceTemplate,
+                requestObj.apiMethod,
+                requestObj.apiCreator,
+                requestObj.apiCreatorTenantDomain,
+                requestObj.apiTier,
+                requestObj.apiHostname,
+                requestObj.username,
+                requestObj.userTenantDomain,
+                requestObj.userIp,
+                requestObj.userAgent,
+                requestObj.requestTimestamp,
+                requestObj.throttledOut,
+                requestObj.responseTime,
+                requestObj.serviceTime,
+                requestObj.backendTime,
+                requestObj.responseCacheHit,
+                requestObj.responseSize,
+                requestObj.protocol,
+                requestObj.responseCode,
+                requestObj.destination,
+                requestObj.securityLatency,
+                requestObj.throttlingLatency,
+                requestObj.requestMedLat,
+                requestObj.responseMedLat,
+                requestObj.backendLatency,
+                requestObj.otherLatency,
+                requestObj.gatewayType,
+                requestObj.label
         });
     }
 }
